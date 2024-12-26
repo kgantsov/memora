@@ -2,6 +2,7 @@ use charybdis::{
     operations::{Find, Insert, Update},
     types::Uuid,
 };
+use serde::Deserialize;
 use serde_json;
 use serde_json::json;
 
@@ -9,7 +10,8 @@ use validator::Validate;
 
 use crate::model::file::File;
 use crate::schema::file::FileUpdateRequest;
-use crate::schema::file::{FileCreateRequest, FilesResponse};
+use crate::schema::file::FileCreateRequest;
+use crate::schema::file::FilesResponse;
 
 use actix_web::{
     delete,
@@ -51,16 +53,46 @@ impl ResponseError for APIError {
     }
 }
 
-#[get("/v1/files")]
-pub async fn get_files(data: web::Data<AppState>) -> Result<impl Responder, APIError> {
-    let files = File::find_all().execute(&data.database).await;
+#[derive(Deserialize)]
+pub struct PaginationQuery {
+    last_id: Option<Uuid>, // Adjust type based on your ID field type
+    limit: Option<i32>,      // Optional limit parameter
+}
 
-    match files {
-        Ok(files) => {
-            let files = files.try_collect().await.unwrap();
-            Ok(HttpResponse::Ok().json(json!(&FilesResponse { objects: files })))
+#[get("/v1/files")]
+pub async fn get_files(
+    data: web::Data<AppState>,
+    query: web::Query<PaginationQuery>,
+) -> Result<impl Responder, APIError> {
+    match query.last_id.clone() {
+        Some(last_id) => {
+            let files = File::find(
+                "SELECT * FROM files WHERE token(id) > token(?) LIMIT ?",
+                (last_id.clone(), query.limit.unwrap_or(100).min(100)),
+            ).execute(&data.database).await;
+
+            match files {
+                Ok(files) => {
+                    let files = files.try_collect().await.unwrap();
+
+                    Ok(HttpResponse::Ok().json(json!(&FilesResponse{objects: files})))
+                },
+                Err(_) => Err(APIError::NotFound)
+            }
+        },
+        None => {
+            let files = File::find(
+                "SELECT * FROM files LIMIT ?", (query.limit.unwrap_or(100).min(100), )
+            ).execute(&data.database).await;
+
+            match files {
+                Ok(files) => {
+                    let files = files.try_collect().await.unwrap();
+                    Ok(HttpResponse::Ok().json(json!(&FilesResponse{objects: files})))
+                },
+                Err(_) => Err(APIError::NotFound)
+            }
         }
-        Err(_) => Err(APIError::NotFound),
     }
 }
 

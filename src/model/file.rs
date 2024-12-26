@@ -3,6 +3,7 @@ use charybdis::types::{Text, Timestamp, Uuid};
 use serde::{Deserialize, Serialize};
 
 use crate::schema::file::FileCreateRequest;
+use crate::node::generate_uuid_v1;
 
 #[charybdis_model(
     table_name = files,
@@ -25,7 +26,7 @@ pub struct File {
 impl File {
     pub fn from_request(payload: &FileCreateRequest) -> Self {
         File {
-            id: Uuid::new_v4(),
+            id: generate_uuid_v1().unwrap(),
             name: payload.name.to_string(),
             directory: payload.directory.to_string(),
             status: payload.status.to_string(),

@@ -1,6 +1,7 @@
 mod api;
 mod model;
 mod schema;
+mod node;
 
 use actix_web::{middleware::Logger, web::Data, App, HttpServer};
 
