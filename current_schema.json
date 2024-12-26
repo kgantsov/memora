@@ -1,0 +1,68 @@
+{
+  "tables": {
+    "files": {
+      "fields": [
+        [
+          "created_at",
+          "timestamp",
+          false
+        ],
+        [
+          "directory",
+          "text",
+          false
+        ],
+        [
+          "id",
+          "uuid",
+          false
+        ],
+        [
+          "modified_at",
+          "timestamp",
+          false
+        ],
+        [
+          "name",
+          "text",
+          false
+        ],
+        [
+          "status",
+          "text",
+          false
+        ]
+      ],
+      "field_names": [
+        "directory",
+        "status",
+        "created_at",
+        "name",
+        "id",
+        "modified_at"
+      ],
+      "types_by_name": {
+        "created_at": "timestamp",
+        "name": "text",
+        "status": "text",
+        "directory": "text",
+        "id": "uuid",
+        "modified_at": "timestamp"
+      },
+      "type_name": "",
+      "table_name": "",
+      "base_table": "",
+      "partition_keys": [
+        "id"
+      ],
+      "clustering_keys": [],
+      "static_columns": [],
+      "global_secondary_indexes": [],
+      "local_secondary_indexes": [],
+      "table_options": null
+    }
+  },
+  "udts": {},
+  "materialized_views": {},
+  "keyspace_name": "memora"
+}
