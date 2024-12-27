@@ -2,8 +2,8 @@ use charybdis::macros::charybdis_model;
 use charybdis::types::{Text, Timestamp, Uuid};
 use serde::{Deserialize, Serialize};
 
-use crate::schema::file::FileCreateRequest;
 use crate::node::generate_uuid_v1;
+use crate::schema::file::FileCreateRequest;
 
 #[charybdis_model(
     table_name = files,
