@@ -15,44 +15,15 @@ use crate::schema::file::FilesResponse;
 use crate::{client::Client, model::file::File};
 
 use actix_web::{
-    delete,
-    error::ResponseError,
-    get,
+    delete, get,
     http::StatusCode,
     post, put,
     web::{self, Path},
     HttpResponse, Responder,
 };
-use derive_more::{Display, Error};
 
 use crate::config::app::AppState;
-
-#[derive(serde::Serialize)]
-pub struct Error {
-    pub error: String,
-}
-
-#[derive(Debug, Display, Error)]
-pub enum APIError {
-    NotFound,
-}
-
-impl ResponseError for APIError {
-    fn status_code(&self) -> StatusCode {
-        match self {
-            APIError::NotFound => StatusCode::NOT_FOUND,
-        }
-    }
-
-    fn error_response(&self) -> HttpResponse {
-        HttpResponse::build(self.status_code()).body(
-            serde_json::to_string(&Error {
-                error: self.to_string(),
-            })
-            .unwrap(),
-        )
-    }
-}
+use crate::error::APIError;
 
 #[derive(Deserialize)]
 pub struct PaginationQuery {
@@ -76,11 +47,20 @@ pub async fn get_files(
 
             match files {
                 Ok(files) => {
-                    let files = files.try_collect().await.unwrap();
+                    let files = files.try_collect().await.map_err(|e| {
+                        log::error!("Error fetching files: {:?}", e);
+                        APIError::new(
+                            "Error fetching files".to_string(),
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                        )
+                    })?;
 
                     Ok(HttpResponse::Ok().json(json!(&FilesResponse { objects: files })))
                 }
-                Err(_) => Err(APIError::NotFound),
+                Err(_) => Err(APIError::new(
+                    "Error fetching files".to_string(),
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                )),
             }
         }
         None => {
@@ -93,10 +73,19 @@ pub async fn get_files(
 
             match files {
                 Ok(files) => {
-                    let files = files.try_collect().await.unwrap();
+                    let files = files.try_collect().await.map_err(|e| {
+                        log::error!("Error fetching files: {:?}", e);
+                        APIError::new(
+                            "Error fetching files".to_string(),
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                        )
+                    })?;
                     Ok(HttpResponse::Ok().json(json!(&FilesResponse { objects: files })))
                 }
-                Err(_) => Err(APIError::NotFound),
+                Err(_) => Err(APIError::new(
+                    "Error fetching files".to_string(),
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                )),
             }
         }
     }
@@ -113,7 +102,13 @@ pub async fn create_file(
     let response = match validated {
         Ok(_) => {
             let file = File::from_request(&payload);
-            file.insert().execute(&data.database).await.unwrap();
+            file.insert().execute(&data.database).await.map_err(|err| {
+                log::error!("Error fetching files: {:?}", err);
+                APIError::new(
+                    "Error during creation of a file".to_string(),
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                )
+            })?;
 
             // join directory and name to create object path
             let object_path = std::path::Path::new("memora")
@@ -172,7 +167,13 @@ pub async fn update_file(
                 modified_at: payload.modified_at,
                 ..Default::default()
             };
-            file.update().execute(&data.database).await.unwrap();
+            file.update().execute(&data.database).await.map_err(|e| {
+                log::error!("Error updating file: {:?}", e);
+                APIError::new(
+                    "Error during update of a file".to_string(),
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                )
+            })?;
 
             let file_response = FileResponse {
                 id: file.id,
@@ -241,7 +242,10 @@ pub async fn get_file(
 
             Ok(HttpResponse::Ok().json(json!(file_response)))
         }
-        Err(_) => Err(APIError::NotFound),
+        Err(_) => Err(APIError::new(
+            "File not found".to_string(),
+            StatusCode::NOT_FOUND,
+        )),
     }
 }
 
@@ -269,15 +273,30 @@ pub async fn delete_file(
             client
                 .delete_object(&object_path.to_str().unwrap())
                 .await
-                .map_err(|_| APIError::NotFound)?;
+                .map_err(|_| {
+                    APIError::new(
+                        "Error deleting file".to_string(),
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                    )
+                })?;
         }
-        Err(_) => return Err(APIError::NotFound),
+        Err(_) => {
+            return Err(APIError::new(
+                "File not found".to_string(),
+                StatusCode::NOT_FOUND,
+            ))
+        }
     }
 
     File::delete_by_id(file_id.into_inner())
         .execute(&data.database)
         .await
-        .unwrap();
+        .map_err(|_| {
+            APIError::new(
+                "Error deleting file".to_string(),
+                StatusCode::INTERNAL_SERVER_ERROR,
+            )
+        })?;
 
     return Ok(HttpResponse::Ok().json(json!("File deleted")));
 }

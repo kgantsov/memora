@@ -1,5 +1,6 @@
 mod api;
 mod client;
+mod error;
 mod model;
 mod node;
 mod schema;
