@@ -1,16 +1,16 @@
 mod api;
 mod client;
 mod error;
+mod handler;
+mod jwt_auth;
 mod model;
-mod node;
 mod schema;
+mod utils;
 
 use std::{env, fs};
 
 use actix_web::{middleware::Logger, web::Data, App, HttpServer};
 use aws_config::{meta::region::RegionProviderChain, BehaviorVersion};
-
-use api::file::{create_file, delete_file, get_file, get_files, update_file};
 
 use crate::client::Client;
 use crate::config::app::AppState;
@@ -56,12 +56,8 @@ async fn main() -> std::io::Result<()> {
                 database: app_data.database.clone(),
             }))
             .app_data(Data::new(client.clone()))
+            .configure(handler::config)
             .wrap(logger)
-            .service(get_file)
-            .service(get_files)
-            .service(create_file)
-            .service(update_file)
-            .service(delete_file)
     })
     .bind((url, port))?
     .run()
