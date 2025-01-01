@@ -1,8 +1,22 @@
+use std::fmt;
+
 use charybdis::types::{Text, Timestamp, Uuid};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use crate::model::file::File;
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub enum FileStatus {
+    OPEN,
+    CLOSED,
+}
+
+impl fmt::Display for FileStatus {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
 
 #[derive(Serialize, Debug, Validate)]
 pub struct FileResponse {
@@ -20,14 +34,14 @@ pub struct FileResponse {
 pub struct FileCreateRequest {
     pub name: Text,
     pub directory: Text,
-    pub status: Text,
+    pub status: FileStatus,
 }
 
 #[derive(Deserialize, Debug, Validate)]
 pub struct FileUpdateRequest {
     pub name: Text,
     pub directory: Text,
-    pub status: Text,
+    pub status: FileStatus,
     pub created_at: Timestamp,
     pub modified_at: Timestamp,
 }
