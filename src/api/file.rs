@@ -10,7 +10,10 @@ use validator::Validate;
 
 use crate::schema::file::FileUpdateRequest;
 use crate::schema::file::FilesResponse;
-use crate::{client::Client, model::file::File};
+use crate::{
+    client::Client,
+    model::file::File
+};
 use crate::{error::ErrorMessage, schema::file::FileResponse};
 use crate::{jwt_auth, model::user::User, schema::file::FileCreateRequest};
 
@@ -45,7 +48,7 @@ pub async fn get_files(
     match query.last_id.clone() {
         Some(last_id) => {
             let files = File::find(
-                "SELECT * FROM files WHERE token(user_id, id) > token(?, ?) LIMIT ?",
+                "SELECT * FROM files WHERE user_id = ? AND id > ? LIMIT ?",
                 (
                     user.id.clone(),
                     last_id.clone(),
