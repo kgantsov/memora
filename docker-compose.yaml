@@ -1,17 +1,15 @@
-# deployment of 3 nodes of the server
-version: '3.8'
-
 services:
   db:
     container_name: db
     image: scylladb/scylla
+    command: --smp 1 --memory 1G --overprovisioned 1
     ports:
       - "9180:9180"
       - "9160:9160"
       - "9042:9042"
       - "19042:19042"
-    # healthcheck:
-    #   test: ["CMD", "curl", "-f", "http://localhost:8000/readyz"]
-    #   interval: 10s
-    #   timeout: 10s
-    #   retries: 5
+    healthcheck:
+      test: ["CMD-SHELL", "[ $$(nodetool statusgossip) = running ]"]
+      interval: 10s
+      timeout: 5s
+      retries: 10

@@ -10,10 +10,7 @@ use validator::Validate;
 
 use crate::schema::file::FileUpdateRequest;
 use crate::schema::file::FilesResponse;
-use crate::{
-    client::Client,
-    model::file::File
-};
+use crate::{client::Client, model::file::File};
 use crate::{error::ErrorMessage, schema::file::FileResponse};
 use crate::{jwt_auth, model::user::User, schema::file::FileCreateRequest};
 
@@ -311,4 +308,72 @@ pub async fn delete_file(
         .map_err(|_| HttpError::server_error(ErrorMessage::ServerError))?;
 
     return Ok(HttpResponse::Ok().json(json!("File deleted")));
+}
+
+#[get("/files/{directory:.*}")]
+pub async fn get_files_by_directory(
+    directory: Path<String>,
+    data: web::Data<AppState>,
+    jwt: jwt_auth::JwtMiddleware,
+    query: web::Query<PaginationQuery>,
+) -> Result<impl Responder, HttpError> {
+    let user = jwt.get_user(&data.database).await?;
+
+    log::info!("directory: {:?}", directory);
+
+    User::find_first_by_id(user.id.clone())
+        .execute(&data.database)
+        .await
+        .map_err(|_| HttpError::not_found(ErrorMessage::FileNotFound))?;
+
+    match query.last_id.clone() {
+        Some(last_id) => {
+            let files = File::find(
+                "SELECT * FROM files_by_directory WHERE user_id = ? AND directory = ? AND id > ? LIMIT ?",
+                (
+                    user.id.clone(),
+                    directory.into_inner(),
+                    last_id.clone(),
+                    query.limit.unwrap_or(100).min(100),
+                ),
+            )
+            .execute(&data.database)
+            .await;
+
+            match files {
+                Ok(files) => {
+                    let files = files.try_collect().await.map_err(|e| {
+                        log::error!("Error fetching files: {:?}", e);
+                        HttpError::server_error(ErrorMessage::ServerError)
+                    })?;
+
+                    Ok(HttpResponse::Ok().json(json!(&FilesResponse { objects: files })))
+                }
+                Err(_) => Err(HttpError::server_error(ErrorMessage::ServerError)),
+            }
+        }
+        None => {
+            let files = File::find(
+                "SELECT * FROM files_by_directory WHERE user_id = ? AND directory = ? LIMIT ?",
+                (
+                    user.id.clone(),
+                    directory.clone(),
+                    query.limit.unwrap_or(100).min(100),
+                ),
+            )
+            .execute(&data.database)
+            .await;
+
+            match files {
+                Ok(files) => {
+                    let files = files.try_collect().await.map_err(|e| {
+                        log::error!("Error fetching files: {:?}", e);
+                        HttpError::server_error(ErrorMessage::ServerError)
+                    })?;
+                    Ok(HttpResponse::Ok().json(json!(&FilesResponse { objects: files })))
+                }
+                Err(_) => Err(HttpError::server_error(ErrorMessage::ServerError)),
+            }
+        }
+    }
 }
