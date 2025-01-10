@@ -7,6 +7,18 @@ use validator::Validate;
 use crate::model::file::File;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
+pub enum FileType {
+    FILE,
+    DIRECTORY,
+}
+
+impl fmt::Display for FileType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum FileStatus {
     OPEN,
     CLOSED,
@@ -23,6 +35,7 @@ pub struct FileResponse {
     pub id: Uuid,
     pub name: Text,
     pub directory: Text,
+    pub file_type: Text,
     pub status: Text,
     pub presigned_url: Option<Text>,
     pub upload_presigned_url: Option<Text>,
@@ -34,6 +47,7 @@ pub struct FileResponse {
 pub struct FileCreateRequest {
     pub name: Text,
     pub directory: Text,
+    pub file_type: FileType,
     pub status: FileStatus,
 }
 
@@ -41,6 +55,7 @@ pub struct FileCreateRequest {
 pub struct FileUpdateRequest {
     pub name: Text,
     pub directory: Text,
+    pub file_type: FileType,
     pub status: FileStatus,
     pub created_at: Timestamp,
     pub modified_at: Timestamp,

@@ -13,6 +13,7 @@ use crate::schema::file::FilesResponse;
 use crate::{client::Client, model::file::File};
 use crate::{error::ErrorMessage, schema::file::FileResponse};
 use crate::{jwt_auth, model::user::User, schema::file::FileCreateRequest};
+use crate::{schema::file::FileType};
 
 use actix_web::{
     delete, get, post, put,
@@ -113,19 +114,11 @@ pub async fn create_file(
                 HttpError::server_error(ErrorMessage::ServerError)
             })?;
 
-            // join directory and name to create object path
-            let object_path = std::path::Path::new("memora")
-                .join(&file.directory)
-                .join(&file.name);
-
-            let upload_presigned_url = client
-                .get_upload_presigned_url(&object_path.to_str().unwrap(), 60 * 60 * 24)
-                .await;
-
             let mut file_response = FileResponse {
                 id: file.id,
                 name: file.name,
                 directory: file.directory,
+                file_type: file.file_type,
                 status: file.status,
                 created_at: file.created_at,
                 modified_at: file.modified_at,
@@ -133,13 +126,24 @@ pub async fn create_file(
                 upload_presigned_url: None,
             };
 
-            match upload_presigned_url {
-                Ok(url) => {
-                    log::info!("Presigned UPLOAD URL: {:?}", url);
-                    file_response.upload_presigned_url = Some(url);
-                }
-                Err(err) => {
-                    log::error!("Error generating presigned URL: {}", err);
+            if file_response.file_type == FileType::FILE.to_string() {
+                // join directory and name to create object path
+                let object_path = std::path::Path::new("memora")
+                    .join(&file_response.directory)
+                    .join(&file_response.name);
+
+                let upload_presigned_url = client
+                    .get_upload_presigned_url(&object_path.to_str().unwrap(), 60 * 60 * 24)
+                    .await;
+
+                match upload_presigned_url {
+                    Ok(url) => {
+                        log::info!("Presigned UPLOAD URL: {:?}", url);
+                        file_response.upload_presigned_url = Some(url);
+                    }
+                    Err(err) => {
+                        log::error!("Error generating presigned URL: {}", err);
+                    }
                 }
             }
 
@@ -174,6 +178,7 @@ pub async fn update_file(
                 id: file_id.into_inner(),
                 name: payload.name.to_string(),
                 directory: payload.directory.to_string(),
+                file_type: payload.file_type.to_string(),
                 status: payload.status.to_string(),
                 created_at: payload.created_at,
                 modified_at: payload.modified_at,
@@ -188,6 +193,7 @@ pub async fn update_file(
                 id: file.id,
                 name: file.name,
                 directory: file.directory,
+                file_type: file.file_type,
                 status: file.status,
                 created_at: file.created_at,
                 modified_at: file.modified_at,
@@ -228,19 +234,11 @@ pub async fn get_file(
 
     match file {
         Ok(file) => {
-            // join directory and name to create object path
-            let object_path = std::path::Path::new("memora")
-                .join(&file.directory)
-                .join(&file.name);
-
-            let presigned_url = client
-                .get_presigned_url(&object_path.to_str().unwrap(), 60 * 60 * 24)
-                .await;
-
             let mut file_response = FileResponse {
                 id: file.id,
-                name: file.name,
-                directory: file.directory,
+                name: file.name.clone(),
+                directory: file.directory.clone(),
+                file_type: file.file_type.clone(),
                 status: file.status,
                 created_at: file.created_at,
                 modified_at: file.modified_at,
@@ -248,13 +246,24 @@ pub async fn get_file(
                 upload_presigned_url: None,
             };
 
-            match presigned_url {
-                Ok(url) => {
-                    log::info!("Presigned UPLOAD URL: {:?}", url);
-                    file_response.upload_presigned_url = Some(url);
-                }
-                Err(err) => {
-                    log::error!("Error generating presigned URL: {}", err);
+            if file_response.file_type == FileType::FILE.to_string() {
+                // join directory and name to create object path
+                let object_path = std::path::Path::new("memora")
+                    .join(&file.directory)
+                    .join(&file.name);
+
+                let presigned_url = client
+                    .get_presigned_url(&object_path.to_str().unwrap(), 60 * 60 * 24)
+                    .await;
+
+                match presigned_url {
+                    Ok(url) => {
+                        log::info!("Presigned UPLOAD URL: {:?}", url);
+                        file_response.upload_presigned_url = Some(url);
+                    }
+                    Err(err) => {
+                        log::error!("Error generating presigned URL: {}", err);
+                    }
                 }
             }
 
@@ -289,15 +298,17 @@ pub async fn delete_file(
 
     match file {
         Ok(file) => {
-            // join directory and name to create object path
-            let object_path = std::path::Path::new("memora")
-                .join(&file.directory)
-                .join(&file.name);
+            if file.file_type == FileType::FILE.to_string() {
+                // join directory and name to create object path
+                let object_path = std::path::Path::new("memora")
+                    .join(&file.directory)
+                    .join(&file.name);
 
-            client
-                .delete_object(&object_path.to_str().unwrap())
-                .await
-                .map_err(|_| HttpError::server_error(ErrorMessage::ServerError))?;
+                client
+                    .delete_object(&object_path.to_str().unwrap())
+                    .await
+                    .map_err(|_| HttpError::server_error(ErrorMessage::ServerError))?;
+            }
         }
         Err(_) => return Err(HttpError::not_found(ErrorMessage::FileNotFound)),
     }
