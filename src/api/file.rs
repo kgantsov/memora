@@ -8,12 +8,12 @@ use serde_json::json;
 
 use validator::Validate;
 
+use crate::schema::file::FileType;
 use crate::schema::file::FileUpdateRequest;
 use crate::schema::file::FilesResponse;
 use crate::{client::Client, model::file::File};
 use crate::{error::ErrorMessage, schema::file::FileResponse};
 use crate::{jwt_auth, model::user::User, schema::file::FileCreateRequest};
-use crate::{schema::file::FileType};
 
 use actix_web::{
     delete, get, post, put,

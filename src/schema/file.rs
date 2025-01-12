@@ -30,7 +30,7 @@ impl fmt::Display for FileStatus {
     }
 }
 
-#[derive(Serialize, Debug, Validate)]
+#[derive(Serialize, Deserialize, Debug, Validate)]
 pub struct FileResponse {
     pub id: Uuid,
     pub name: Text,
@@ -43,7 +43,7 @@ pub struct FileResponse {
     pub modified_at: Timestamp,
 }
 
-#[derive(Deserialize, Debug, Validate)]
+#[derive(Serialize, Deserialize, Debug, Validate)]
 pub struct FileCreateRequest {
     pub name: Text,
     pub directory: Text,
@@ -51,7 +51,7 @@ pub struct FileCreateRequest {
     pub status: FileStatus,
 }
 
-#[derive(Deserialize, Debug, Validate)]
+#[derive(Serialize, Deserialize, Debug, Validate)]
 pub struct FileUpdateRequest {
     pub name: Text,
     pub directory: Text,
