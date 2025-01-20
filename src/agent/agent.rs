@@ -1,21 +1,22 @@
 use crate::schema::file::{
     FileCreateRequest, FileResponse, FileStatus, FileType, FileUpdateRequest,
 };
-use aws_config::default_provider::token;
 use charybdis::types::Uuid;
 
-use clap::Parser;
+use fjall::{Config, PartitionHandle};
 use reqwest::Client;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::Semaphore;
-use tokio::task;
+use tokio::task::{self, spawn_blocking};
 
 pub struct Agent {
     token: String,
     scan_dir: PathBuf,
     scan_interval: u64,
+
+    db: PartitionHandle,
 
     semaphore: Arc<Semaphore>,
 
@@ -30,10 +31,16 @@ impl Agent {
         let semaphore = Arc::new(Semaphore::new(max_workers));
         let client = Arc::new(Client::new()); // Shared HTTP client for uploads
 
+        let keyspace = Config::default().open().unwrap();
+        let db = keyspace
+            .open_partition("tasks", Default::default())
+            .unwrap();
+
         Self {
             token,
             scan_dir,
             scan_interval: 5,
+            db,
             semaphore,
             client,
         }
@@ -69,6 +76,12 @@ impl Agent {
                 if path.is_dir() {
                     // Add the subdirectory to the stack for later processing
                     stack.push(path.clone());
+
+                    if !Self::should_upload(self.db.clone(), &path).await {
+                        println!("Skip creating a directory: {}", path.to_string_lossy());
+                        continue;
+                    }
+
                     Self::create_file(
                         self.token.clone(),
                         &path,
@@ -76,15 +89,38 @@ impl Agent {
                         self.client.clone(),
                     )
                     .await?;
+
+                    Self::register_upload(
+                        self.db.clone(),
+                        &path,
+                        FileResponse {
+                            id: Uuid::new_v4(),
+                            name: path.file_name().unwrap().to_string_lossy().to_string(),
+                            directory: path.parent().unwrap().to_string_lossy().to_string(),
+                            file_type: "DIRECTORY".to_owned(),
+                            status: "CLOSED".to_owned(),
+                            presigned_url: None,
+                            upload_presigned_url: None,
+                            created_at: chrono::Utc::now(),
+                            modified_at: chrono::Utc::now(),
+                        },
+                    )
+                    .await?;
                 } else if path.is_file() {
+                    if !Self::should_upload(self.db.clone(), &path).await {
+                        println!("Skip creating a file: {}", path.to_string_lossy());
+                        continue;
+                    }
+
                     // Upload the file in parallel, limited by the semaphore
-                    let path_clone = path.clone();
+                    let path_clone = path.to_path_buf();
                     let permit = self.semaphore.clone().acquire_owned().await.unwrap();
                     let client_clone = self.client.clone();
                     let token_clone = self.token.clone();
+                    let db_clone = self.db.clone();
 
                     let task = task::spawn(async move {
-                        Self::upload_file(token_clone, &path_clone, client_clone).await;
+                        Self::upload_file(db_clone, token_clone, &path_clone, client_clone).await;
                         drop(permit); // Release the semaphore permit
                     });
                     tasks.push(task);
@@ -211,13 +247,16 @@ impl Agent {
 
     // Function to upload a file to the server
     async fn upload_file(
+        db: PartitionHandle,
         token: String,
         path: &Path,
         client: Arc<Client>,
     ) -> Result<(), std::io::Error> {
         let file_name = path.file_name().unwrap().to_string_lossy();
         println!("Uploading: {}", file_name);
-        let file = Self::create_file(token.clone(), &path, FileType::FILE, client.clone()).await?;
+        let file: FileResponse =
+            Self::create_file(token.clone(), &path, FileType::FILE, client.clone()).await?;
+        let file_clone = file.clone();
 
         match file.upload_presigned_url {
             Some(url) => {
@@ -247,7 +286,7 @@ impl Agent {
                         )
                         .await?;
 
-                        Ok(())
+                        Self::register_upload(db.clone(), path, file_clone).await
                     }
                     Ok(response) => {
                         eprintln!("Failed to upload {}: HTTP {}", file_name, response.status());
@@ -267,5 +306,52 @@ impl Agent {
                 ))
             }
         }
+    }
+
+    async fn should_upload(db: PartitionHandle, path: &Path) -> bool {
+        let path_clone = path.to_path_buf();
+        let db_clone = db.clone();
+
+        let item = spawn_blocking(move || db_clone.get(path_clone.to_string_lossy().as_bytes()))
+            .await
+            .expect("join failed")
+            .unwrap();
+
+        match item {
+            Some(item) => {
+                let file: Result<FileResponse, serde_json::Error> = serde_json::from_slice(&item);
+                match file {
+                    Ok(_) => {
+                        return false;
+                    }
+                    Err(e) => {
+                        eprintln!("Error parsing file: {}", e);
+                        return false;
+                    }
+                }
+            }
+            None => {
+                return true;
+            }
+        }
+    }
+
+    async fn register_upload(
+        db: PartitionHandle,
+        path: &Path,
+        file: FileResponse,
+    ) -> Result<(), std::io::Error> {
+        let path_clone = path.to_path_buf();
+        let db_clone = db.clone();
+
+        spawn_blocking(move || {
+            db_clone
+                .insert(path_clone, serde_json::to_string(&file).unwrap())
+                .unwrap()
+        })
+        .await
+        .expect("join failed");
+
+        Ok(())
     }
 }

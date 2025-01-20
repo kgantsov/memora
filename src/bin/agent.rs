@@ -1,7 +1,7 @@
 use memora::agent::agent::Agent;
 
 use clap::Parser;
-use std::path::{PathBuf};
+use std::path::PathBuf;
 
 /// Command-line arguments
 #[derive(Parser, Debug)]

@@ -30,7 +30,7 @@ impl fmt::Display for FileStatus {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Validate)]
+#[derive(Serialize, Deserialize, Debug, Validate, Clone)]
 pub struct FileResponse {
     pub id: Uuid,
     pub name: Text,
